@@ -16,14 +16,12 @@ data = data.lower()
 data_list = [data]
 
 
-
-
 text = []
 labels = []
 
 start_of_list = 0
 labels = []
-end_of_list = 30
+end_of_list = 100
 
 
 for i in data_list:
@@ -41,48 +39,108 @@ for i in text:
 	start_of_list += 1
 	end_of_list += 1 
 
+text = pd.DataFrame(data_input[:-100])
+labels = pd.DataFrame(labels[100:])
 
-text = pd.DataFrame(data_input[:-30])
-labels = pd.DataFrame(labels[30:])
-print(text)
-
-
-text = to_categorical(text)
+text = (text / 65)
 labels = to_categorical(labels)
 
 
 input_data = np.array(text)
 output_data = np.array(labels)
 
+print(np.shape(input_data))
 
 n_patterns = len(input_data)
 
-input_data = input_data.reshape(n_patterns,1980,1)
- 
+input_data = input_data.reshape(143690, 100, 1)
+
+beginning = input_data[2]
+
 from keras.models import Sequential,load_model
 from keras.layers import LSTM,Dense,Dropout
 from keras.optimizers import nadam,adam,SGD,RMSprop
+from keras.callbacks import ModelCheckpoint
 
+#284 644 800
 model = Sequential([
-	LSTM(80, input_shape=(1980,1), return_sequences=True),
+	LSTM(256, input_shape=(100,1), return_sequences=True),
 	Dropout(0.2),
-	LSTM(70,recurrent_dropout=0.1),
+	LSTM(256),
 	Dropout(0.2),
+	Dense(100,activation="relu"),
 	Dense(66, activation='softmax')
 	])
 
-model.compile(optimizer=nadam(lr=.001),loss="binary_crossentropy")
+model.compile(optimizer="adam",loss="categorical_crossentropy",metrics=["accuracy"])
 
-model.fit(input_data,output_data,validation_split=0.1,batch_size=10,epochs=1,verbose=1)
+filepath="weights-improvement-{epoch:02d}-{loss:.4f}.hdf5"
+checkpoint = ModelCheckpoint(filepath, monitor='loss', verbose=1, save_best_only=True, mode='min')
+callbacks_list = [checkpoint]
 
-model.save("text-gen.h5")
+#model.fit(input_data,output_data,validation_split=0.1,batch_size=128,
+#	epochs=105,verbose=1,callbacks=callbacks_list)
 
-model = model_load("text-gen.h5")
+#model.save("text-gen.h5")
 
-chars = []
+model = load_model("text-gen-smarter.h5")
 
-#for i in range(1000):
-#	predict = model.predict_classes(begining)
-#
-#	for i in predict:
-#		chars.append(np.argmax(i, axis=-1))
+
+beginning = np.array(beginning)
+
+int_to_chars = {v: k for k, v in chars_to_int.items()}
+
+predict_int = []
+
+predict_merge = []
+
+output = []
+
+ints = []
+
+test_text = []
+
+
+
+test_data = beginning.reshape(1,100)
+test_data = 65*test_data
+for i in test_data:
+	for v in i:
+		test_text.append(int_to_chars[v])
+
+print("".join(test_text))
+
+for i in range(1000):
+	beginning = beginning.reshape(1,100,1)
+
+	test_data = beginning.reshape(100,1)
+
+	predict = model.predict(beginning)
+	predict_merge =[ (np.argmax(predict[0]))]
+	#for i in predict:
+	#	predict_merge.append(np.argmax(i))
+
+	predict_merge = pd.DataFrame(predict_merge)
+	predict_merge = predict_merge/65
+
+	new_test_data = pd.DataFrame(test_data)
+
+	new_test_data = new_test_data.append(predict_merge, ignore_index=True)
+
+
+	new_test_data = new_test_data[1:101]
+
+	beginning = np.array(new_test_data)
+
+
+	for i in predict:
+		
+		predict_int.append(np.argmax(i, axis=-1))
+
+
+	for i in predict_int:
+		output.append(int_to_chars[i])
+	predict_int = []
+
+prediction = ("".join(test_text),"".join(output))
+print("".join(prediction))
